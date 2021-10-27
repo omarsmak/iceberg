@@ -21,7 +21,9 @@ package org.apache.iceberg.nessie;
 
 import java.util.Map;
 import org.apache.iceberg.BaseMetastoreTableOperations;
+import org.apache.iceberg.SnapshotManager;
 import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.TableMetadataParser;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -74,6 +76,7 @@ public class NessieTableOperations extends BaseMetastoreTableOperations {
 
   @Override
   protected void doRefresh() {
+    System.out.println("Refresh Operation ===========================");
     try {
       reference.refresh();
     } catch (NessieNotFoundException e) {
@@ -87,11 +90,22 @@ public class NessieTableOperations extends BaseMetastoreTableOperations {
               new IllegalStateException("Cannot refresh iceberg table: " +
                   String.format("Nessie points to a non-Iceberg object for path: %s.", key)));
       metadataLocation = table.getMetadataLocation();
+      System.out.println("Metadata location: " + table.getMetadataLocation());
+      System.out.println("Refreshed Hash: " + reference.getHash());
     } catch (NessieNotFoundException ex) {
       if (currentMetadataLocation() != null) {
         throw new NoSuchTableException(ex, "No such table %s", key);
       }
     }
+    /*if (metadataLocation != null) {
+      TableMetadata metadata = TableMetadataParser.read(fileIO, metadataLocation);
+      if (metadata.currentSnapshot() != null) {
+        System.out.println("Parsed new metadata current snapshot: " + metadata.currentSnapshot().snapshotId());
+      }
+      if (currentMetadataLocation() != null) {
+        System.out.println("Current metadata file: " + currentMetadataLocation());
+      }
+    }*/
     refreshFromMetadataLocation(metadataLocation, 2);
   }
 
@@ -99,7 +113,15 @@ public class NessieTableOperations extends BaseMetastoreTableOperations {
   protected void doCommit(TableMetadata base, TableMetadata metadata) {
     reference.checkMutable();
 
+    System.out.println("Commit Operation ===========================");
+
     String newMetadataLocation = writeNewMetadata(metadata, currentVersion() + 1);
+
+    System.out.println("Metadata location: " + newMetadataLocation);
+
+    if (metadata.currentSnapshot() != null) {
+      System.out.println(metadata.currentSnapshot().snapshotId());
+    }
 
     boolean delete = true;
     try {
@@ -114,6 +136,8 @@ public class NessieTableOperations extends BaseMetastoreTableOperations {
       Branch branch = client.getTreeApi().commitMultipleOperations(reference.getAsBranch().getName(),
           reference.getHash(), op);
       reference.updateReference(branch);
+
+      System.out.println("Committed Hash: " + reference.getHash());
 
       delete = false;
     } catch (NessieConflictException ex) {
